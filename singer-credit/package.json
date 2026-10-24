@@ -1,0 +1,15 @@
+{
+  "name": "singer-credit-desktop",
+  "version": "0.1.0",
+  "description": "SINGER CREDIT - Loan Model & Loan Management Platform (RFP 01 demo)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.js"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "^45.0.0"
+  }
+}
