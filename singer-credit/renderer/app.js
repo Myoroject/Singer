@@ -23,19 +23,35 @@ const STATUS_CLS = { active: 'ok', settled: 'ok', approved: 'info', signed: 'inf
 const statusTag = s => tag(s.replace('_', ' '), STATUS_CLS[s] || '');
 const btn = (label, act, attrs = '', cls = '') => `<button class="btn ${cls}" data-act="${act}" ${attrs}>${label}</button>`;
 
+const ICONS = {
+  dashboard: '<path d="M3 13h8V3H3zM13 21h8V11h-8zM13 3v6h8V3zM3 21h8v-6H3z"/>',
+  apply: '<path d="M12 5v14M5 12h14"/>',
+  queue: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c.5-3.5 3-5.5 6-5.5s5.5 2 6 5.5M17 5.5a3 3 0 0 1 0 5.5M21 20c-.3-2.2-1.4-3.8-3-4.6"/>',
+  loans: '<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',
+  disb: '<path d="M3 11l9-6 9 6M5 11v8h14v-8M9 19v-5h6v5"/>',
+  collections: '<path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/>',
+  customers: '<circle cx="12" cy="8" r="4"/><path d="M4 21c.6-4 3.8-6 8-6s7.4 2 8 6"/>',
+  reports: '<path d="M5 20V10M12 20V4M19 20v-7"/>',
+  policy: '<path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/>',
+  audit: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/>',
+  guide: '<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19V5M9 8h6"/>'
+};
+const icon = k => `<svg viewBox="0 0 24 24">${ICONS[k]}</svg>`;
 const NAV = [
-  ['dashboard', 'Dashboard'], ['apply', 'New application'], ['queue', 'Underwriter queue'], ['loans', 'Loans'],
-  ['collections', 'Collections'], ['customers', 'Customers'], ['reports', 'Reports'], ['policy', 'Policy'], ['audit', 'Audit log']
+  ['dashboard', 'Dashboard', 'dashboard'], ['apply', 'New application', 'apply'], ['queue', 'Underwriter queue', 'queue'], ['loans', 'Loans', 'loans'],
+  ['disbursements', 'Disbursements', 'disb'], ['collections', 'Collections', 'collections'], ['customers', 'Customers', 'customers'],
+  ['reports', 'Reports', 'reports'], ['policy', 'Policy', 'policy'], ['audit', 'Audit log', 'audit'], ['guide', 'User guide', 'guide']
 ];
+const fmtDate = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 async function refreshChrome() {
   const st = await api('state');
   S.clock = st.clock; S.policy = st.policy; S.promos = st.promos; S.labels = st.labels;
-  $('#clock').textContent = S.clock;
+  $('#clock').textContent = fmtDate(S.clock);
   const dash = await api('dashboard');
-  $('#nav').innerHTML = NAV.map(([k, t]) => {
+  $('#nav').innerHTML = NAV.map(([k, t, ic]) => {
     const n = k === 'queue' ? dash.counts.referred : k === 'collections' ? dash.counts.arrears : 0;
-    return `<button data-nav="${k}" class="${S.view === k || (k === 'loans' && S.view === 'loan') ? 'on' : ''}">${t}${n ? `<span class="badge">${n}</span>` : ''}</button>`;
+    return `<button data-nav="${k}" class="${S.view === k || (k === 'loans' && S.view === 'loan') ? 'on' : ''}">${icon(ic)}<span>${t}</span>${n ? `<span class="badge">${n}</span>` : ''}</button>`;
   }).join('');
   $('#langSwitch').innerHTML = [['en', 'EN'], ['si', 'සිං'], ['ta', 'தமிழ்']].map(([k, t]) => `<button data-lang="${k}" class="${S.lang === k ? 'on' : ''}">${t}</button>`).join('');
 }
@@ -60,32 +76,46 @@ VIEWS.dashboard = async () => {
   const r = await api('dashboard');
   const maxAge = Math.max(1, ...Object.values(r.ageing));
   const tot = r.hpVsCredit.hp + r.hpVsCredit.credit || 1;
-  return `${head('Dashboard', 'Portfolio position as of ' + S.clock)}
-  <div class="grid g3">
-    <div class="card stat"><small>Active loans</small><b>${r.counts.active + r.counts.arrears}</b><i>${r.counts.arrears} in arrears</i></div>
-    <div class="card stat"><small>CREDIT outstanding</small><b>LKR ${lkr0(r.outstanding)}</b><i>Disbursed to SINGER: LKR ${lkr0(r.disbursed)}</i></div>
-    <div class="card stat"><small>Awaiting underwriter</small><b>${r.counts.referred}</b><i>${r.counts.referred ? 'SLA timers running' : 'Queue is clear'}</i></div>
+  const kpi = (cls, ic, label, val, unit, help) => `<div class="card kpi ${cls}"><span class="ic">${icon(ic)}</span><div class="lbl">${label}</div><div class="val">${unit ? `<small>${unit}</small>` : ''}${val}</div><div class="help">${help}</div></div>`;
+  return `${head('Dashboard', 'Portfolio position today')}
+  <div class="grid g4">
+    ${kpi('blue', 'loans', 'Active loans', r.counts.active + r.counts.arrears, '', r.counts.arrears ? `${r.counts.arrears} in arrears` : 'All on schedule')}
+    ${kpi('green', 'reports', 'CREDIT outstanding', lkr0(r.outstanding), 'LKR', 'Across all active loans')}
+    ${kpi('red', 'disb', 'Disbursed to SINGER', lkr0(r.disbursed), 'LKR', 'Paid against orders, never to customers')}
+    ${kpi('amber', 'queue', 'Awaiting underwriter', r.counts.referred, '', r.counts.referred ? 'SLA timers running' : 'Queue is clear')}
   </div>
   <div class="grid g2" style="margin-top:20px">
-    <div class="card"><h2>Arrears ageing</h2>${Object.entries(r.ageing).map(([k, v]) => `<div class="row" style="margin:12px 0"><span style="width:64px" class="muted">${esc(k)}</span><div class="bar2 sp"><i style="width:${v / maxAge * 100}%;background:${k === 'Current' ? 'var(--ok)' : 'var(--accent)'}"></i></div><span style="width:96px;text-align:right">${lkr0(v)}</span></div>`).join('')}</div>
-    <div class="card"><h2>Total exposure</h2><div class="bar2" style="height:14px"><i style="width:${r.hpVsCredit.hp / tot * 100}%;background:var(--info)"></i><i style="width:${r.hpVsCredit.credit / tot * 100}%;background:var(--ok)"></i></div>
-      <div class="row" style="margin-top:12px"><span>${tag('SINGER HP', 'info')} LKR ${lkr0(r.hpVsCredit.hp)}</span><span class="sp"></span><span>${tag('CREDIT', 'ok')} LKR ${lkr0(r.hpVsCredit.credit)}</span></div>
-      <div class="divider"></div><h2>Decisions by risk tier</h2>
+    <div class="card"><div class="sect">Arrears ageing</div>${Object.entries(r.ageing).map(([k, v]) => `<div class="row" style="margin:14px 0"><span style="width:64px" class="muted">${esc(k)}</span><div class="bar2 sp"><i style="width:${v / maxAge * 100}%;background:${k === 'Current' ? 'var(--ok)' : 'var(--accent)'}"></i></div><span style="width:96px;text-align:right"><b>${lkr0(v)}</b></span></div>`).join('')}</div>
+    <div class="card"><div class="sect">Total exposure</div><div class="bar2" style="height:14px"><i style="width:${r.hpVsCredit.hp / tot * 100}%;background:var(--info)"></i><i style="width:${r.hpVsCredit.credit / tot * 100}%;background:var(--ok)"></i></div>
+      <div class="row" style="margin-top:12px"><span>${tag('SINGER HP', 'info')} <b>LKR ${lkr0(r.hpVsCredit.hp)}</b></span><span class="sp"></span><span>${tag('CREDIT', 'ok')} <b>LKR ${lkr0(r.hpVsCredit.credit)}</b></span></div>
+      <div class="divider"></div><div class="sect">Decisions by risk tier</div>
       <table><tr><th>Tier</th><th class="r">Approved</th><th class="r">Referred</th><th class="r">Declined</th></tr>${Object.entries(r.byTier).sort().map(([t, v]) => `<tr><td>Tier ${t}</td><td class="r">${v.approved}</td><td class="r">${v.referred}</td><td class="r">${v.declined}</td></tr>`).join('')}</table></div>
   </div>`;
 };
 
-// ----------------------------------------------------------------- new application
+// ----------------------------------------------------------------- new application (3-step wizard)
+const W = { step: 1, quote: null, kyc: null, result: null };
+const KYC_TITLES = { 'e-KYC verified': 'e-KYC verification', 'Bank account verified': 'Bank account and direct-debit mandate', 'No delinquent SINGER HP / BNPL accounts': 'SINGER account standing', 'Credit limit active': 'Credit limit', 'HP protection rules': 'HP protection check' };
+
+function progress(step) {
+  const labels = ['Customer & purchase', 'Verification & plan', 'Decision'];
+  return `<div class="progress"><div class="track"><i style="width:${(step - 1) / 2 * 100}%"></i></div><div class="nodes">${labels.map((t, i) => { const n = i + 1; return `<div class="node ${n < step || (n === 3 && step === 3 && W.result) ? 'done' : n === step ? 'cur' : ''}"><span class="dot">${n < step || (n === 3 && W.result) ? '✓' : n}</span><span class="lbl">${t}</span></div>`; }).join('')}</div></div>`;
+}
+
 VIEWS.apply = async () => {
+  const body = W.step === 1 ? await wizStep1() : W.step === 2 ? wizStep2() : wizStep3();
+  return `${head('New application', 'The same journey the SINGER website follows at checkout.')}${progress(W.step)}${body}`;
+};
+AFTER.apply = () => { const el = $('#f-nic'); if (el) el.onchange = async () => { S.draft = Object.assign(S.draft || {}, { nic: el.value }); await go('apply'); }; };
+
+async function wizStep1() {
   const customers = await api('customers');
   const d = S.draft || {};
   const nic = d.nic || customers[0].nic;
   const docs = (await api('customerDocs', nic)) || {};
   const prods = Object.keys(S.policy.products);
   const reg = docs.salaryMonthsRegular !== undefined ? docs.salaryMonthsRegular : 6;
-  return `${head('New application', 'What the SINGER website sends at checkout: get plan options, then submit for an instant decision.')}
-  <div class="steps"><div class="s cur"><span class="n">1</span>Customer &amp; purchase</div><span class="bar"></span><div class="s ${S.lastQuote ? 'cur' : ''}"><span class="n">2</span>Choose a plan</div><span class="bar"></span><div class="s"><span class="n">3</span>Decision</div></div>
-  <div class="card"><div class="form">
+  return `<div class="card stepcard"><h2>Customer &amp; purchase</h2><p class="lead">Choose the customer and describe what they are buying.</p><div class="form">
     <div class="full"><label>Customer</label><select id="f-nic">${customers.map(c => `<option value="${c.nic}" ${c.nic === nic ? 'selected' : ''}>${esc(c.name)} · ${c.nic} · tier ${c.tier || '-'} · ${c.limitStatus}</option>`).join('')}</select></div>
     <div><label>Product category</label><select id="f-prod">${prods.map(p => `<option ${p === (d.product || 'Electronics') ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
     <div><label>Cash price (LKR)</label><input id="f-price" type="number" value="${d.cashPrice || 150000}"></div>
@@ -99,11 +129,8 @@ VIEWS.apply = async () => {
         <div><label>Tamper risk score (0-100)</label><input id="f-tam" type="number" min="0" max="100" value="${docs.tamperRisk !== undefined ? docs.tamperRisk : 5}"></div></div></div></details></div>
     <div class="full"><details><summary><b>Guarantor</b><span class="muted small">Only when required by policy</span></summary>
       <div class="inner"><div class="form"><div><label>Guarantor NIC</label><input id="f-gnic" value="${esc(d.gnic || '')}" placeholder="e.g. 856234567V"></div><div><label>Relationship</label><input id="f-grel" value="${esc(d.grel || 'Spouse')}"></div></div></div></details></div>
-  </div>
-  <div class="row" style="margin-top:20px"><button class="btn pri" data-act="quote">Show plan options</button></div></div>
-  <div id="quote-out" style="margin-top:24px"></div>`;
-};
-AFTER.apply = () => { $('#f-nic').onchange = async () => { S.draft = Object.assign(S.draft || {}, { nic: $('#f-nic').value }); S.lastQuote = null; await go('apply'); }; };
+  </div><div class="wiz-actions"><span class="sp"></span>${btn('Continue', 'wiz-next', '', 'pri')}</div></div>`;
+}
 
 function readDraft() {
   return {
@@ -114,24 +141,49 @@ function readDraft() {
   };
 }
 
-async function doQuote() {
-  const d = readDraft();
-  S.draft = d;
-  const q = await api('quote', { nic: d.nic, product: d.product, cashPrice: d.cashPrice, downPayment: d.downPayment, promoCode: d.promoCode, docs: d.docs });
-  S.lastQuote = q;
-  const L = S.labels[S.lang];
+function wizStep2() {
+  const q = W.quote, k = W.kyc, L = S.labels[S.lang], d = S.draft;
+  const age = k.checks.find(c => c.rule === 'Minimum age 18');
+  const rows = [{ title: 'Identity (NIC)', pass: age.pass, detail: `${k.customer.nic} · born ${k.customer.dob} · ${age.detail.toLowerCase()}` }]
+    .concat(k.checks.filter(c => c !== age).map(c => ({ title: KYC_TITLES[c.rule] || c.rule, pass: c.pass, detail: c.detail })));
   const cards = q.options.map(o => {
     const ok = o.withinProductLimits && o.withinCreditLimit && q.downPaymentOk;
-    const rows = o.labels[S.lang].filter(([k]) => k !== L.instalment);
-    return `<div class="plan ${ok ? '' : 'off'}" data-act="pick" data-tenor="${o.tenor}">
+    const lines = o.labels[S.lang].filter(([key]) => key !== L.instalment);
+    return `<div class="plan ${ok ? '' : 'off'} ${d.tenor === o.tenor ? 'sel' : ''}" data-act="pick" data-tenor="${o.tenor}">
       <div class="row"><span class="t">${o.tenor} ${esc(L.months)}</span>${o.promo ? tag(o.promo, 'ok') : ''}</div>
       <div class="hero">LKR ${lkr0(o.instalment)} <small>/ ${esc(L.instalment).toLowerCase()}</small></div>
-      <dl>${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+      <dl>${lines.map(([key, v]) => `<dt>${esc(key)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
       ${ok ? '' : `<div style="margin-top:10px">${o.withinProductLimits ? '' : tag('Outside product limits', 'bad')} ${o.withinCreditLimit ? '' : tag('Exceeds available credit', 'bad')}</div>`}</div>`;
   }).join('');
-  $('#quote-out').innerHTML = `<div class="row" style="margin-bottom:14px"><h2 style="margin:0">Plan options</h2>${tag('Risk tier ' + q.tier, 'info')}${q.notes.map(n => tag(n, 'bad')).join('')}<span class="sp"></span><span class="muted small">Minimum down payment: LKR ${lkr0(q.minDownPayment)}</span></div>
-    <div class="grid g3">${cards || '<div class="card muted">No tenors are available for this risk tier.</div>'}</div>
-    <div class="actionbar"><span class="muted" id="picked">Select a plan to continue</span><span class="sp"></span><button class="btn pri" data-act="submit-app" disabled id="submitBtn">Submit application</button></div>`;
+  return `<div class="stack"><div class="card stepcard"><h2>Customer verification</h2><p class="lead">${esc(k.customer.name)} · checked against NIC, e-KYC, bank and SINGER records.</p>
+    <div class="kyc">${rows.map(r => `<div class="it ${r.pass ? '' : 'bad'}"><span class="mk">${r.pass ? '✔' : '✘'}</span><div class="tx"><b>${esc(r.title)}</b><span>${esc(r.detail)}</span></div><span class="st">${r.pass ? tag('Verified', 'ok') : tag('Action needed', 'bad')}</span></div>`).join('')}</div></div>
+    <div class="card stepcard"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Choose a loan plan</h2>${tag('Risk tier ' + q.tier, 'info')}<span class="sp"></span><span class="muted small">Minimum down payment: LKR ${lkr0(q.minDownPayment)}</span></div>
+    <p class="lead">Select the repayment plan the customer prefers. Switch the language at the top to show it in Sinhala or Tamil.</p>
+    ${q.notes.map(n => `<div style="margin-bottom:12px">${tag(n, 'bad')}</div>`).join('')}
+    <div class="grid g3">${cards || '<div class="muted">No tenors are available for this risk tier.</div>'}</div>
+    <div class="wiz-actions">${btn('Back', 'wiz-back')}<span class="muted" id="picked">${d.tenor ? d.tenor + '-month plan selected' : 'Select a plan to continue'}</span><span class="sp"></span><button class="btn pri" data-act="submit-app" id="submitBtn" ${d.tenor ? '' : 'disabled'}>Submit application</button></div></div></div>`;
+}
+
+function wizStep3() {
+  const r = W.result, a = r.app, o = a.option;
+  const checks = a.explain.rules.map(c => `<li><span class="${c.pass ? 'pass' : 'fail'}">${c.pass ? '✔' : '✘'}</span> <b>${esc(c.rule)}</b> <span class="muted">${esc(c.detail)}</span></li>`).join('');
+  const factors = a.explain.scorecard.map(f => `<tr><td>${esc(f.factor)}</td><td class="muted">${esc(f.detail)}</td><td class="r">${f.points} / ${f.max}</td></tr>`).join('');
+  const kind = a.status === 'approved' ? ['ok', '✔', 'Approved instantly'] : a.status === 'referred' ? ['warn', '⏳', 'Sent for manual review'] : ['bad', '✘', 'Application declined'];
+  const reasons = (a.declineReasons || a.referReasons || []).map(x => `<li>${esc(x)}</li>`).join('');
+  return `<div class="card stepcard" style="max-width:760px;margin:0 auto"><div class="result"><div class="ic ${kind[0]}">${kind[1]}</div><h2>${kind[2]}</h2><p class="muted" style="margin:4px 0 0">${esc(a.id)} · risk tier ${a.explain.tier} · score ${a.explain.score}</p></div>
+    ${o ? `<div class="chips"><div><small>Loan amount</small><b>LKR ${lkr0(o.principal)}</b></div><div><small>Instalment</small><b>LKR ${lkr0(o.instalment)}</b></div><div><small>Tenor</small><b>${o.tenor} months</b></div></div>` : ''}
+    ${reasons ? `<ul style="margin:12px 0 0;padding-left:20px">${reasons}</ul>` : ''}
+    <details id="why" style="margin-top:22px"><summary><b>Why this decision?</b><span class="muted small">Rules checked and scorecard</span></summary><div class="inner"><ul class="checks">${checks}</ul>
+      <table style="margin-top:12px"><tr><th>Scorecard factor</th><th>Evidence</th><th class="r">Points</th></tr>${factors}<tr><td><b>Total</b></td><td>Tier ${a.explain.tier}</td><td class="r"><b>${a.explain.score}</b></td></tr></table></div></details>
+    <div class="wiz-actions">${btn('Start another application', 'wiz-new')}<span class="sp"></span>${r.loan ? btn('Open loan ' + r.loan.id, 'open-loan', `data-id="${r.loan.id}"`, 'pri') : a.status === 'referred' ? btn('Go to underwriter queue', 'nav', 'data-view="queue"', 'pri') : ''}</div></div>`;
+}
+
+async function wizNext() {
+  const d = readDraft();
+  S.draft = Object.assign(d, { tenor: undefined });
+  W.kyc = await api('precheck', d.nic, d.product, d.cashPrice);
+  W.quote = await api('quote', { nic: d.nic, product: d.product, cashPrice: d.cashPrice, downPayment: d.downPayment, promoCode: d.promoCode, docs: d.docs });
+  W.step = 2; await go('apply');
 }
 
 async function doSubmit() {
@@ -139,20 +191,8 @@ async function doSubmit() {
   if (!d.tenor) return toast('Select a plan first', true);
   const input = { nic: d.nic, product: d.product, cashPrice: d.cashPrice, downPayment: d.downPayment, promoCode: d.promoCode || null, tenor: d.tenor, orderId: d.orderId, docs: d.docs, lang: S.lang };
   if (d.gnic) input.guarantor = { nic: d.gnic, relationship: d.grel, consent: true };
-  const r = await api('apply', input);
-  const a = r.app;
-  const checks = a.explain.rules.map(c => `<li><span class="${c.pass ? 'pass' : 'fail'}">${c.pass ? '✔' : '✘'}</span> <b>${esc(c.rule)}</b> <span class="muted">${esc(c.detail)}</span></li>`).join('');
-  const factors = a.explain.scorecard.map(f => `<tr><td>${esc(f.factor)}</td><td class="muted">${esc(f.detail)}</td><td class="r">${f.points} / ${f.max}</td></tr>`).join('');
-  const kind = a.status === 'approved' ? ['ok', '✔', 'Approved instantly'] : a.status === 'referred' ? ['warn', '⏳', 'Sent for manual review'] : ['bad', '✘', 'Application declined'];
-  const reasons = (a.declineReasons || a.referReasons || []).map(x => `<li>${esc(x)}</li>`).join('');
-  const o = a.option;
-  modal(`<div class="result"><div class="ic ${kind[0]}">${kind[1]}</div><h2>${kind[2]}</h2><p class="muted" style="margin:4px 0 0">${esc(a.id)} · risk tier ${a.explain.tier} · score ${a.explain.score}</p></div>
-    ${o ? `<div class="chips"><div><small>Loan amount</small><b>LKR ${lkr0(o.principal)}</b></div><div><small>Instalment</small><b>LKR ${lkr0(o.instalment)}</b></div><div><small>Tenor</small><b>${o.tenor} months</b></div></div>` : ''}
-    ${reasons ? `<ul style="margin:12px 0 0;padding-left:20px">${reasons}</ul>` : ''}
-    <details id="why" style="margin-top:18px"><summary><b>Why this decision?</b><span class="muted small">Rules checked and scorecard</span></summary><div class="inner"><ul class="checks">${checks}</ul>
-      <table style="margin-top:12px"><tr><th>Scorecard factor</th><th>Evidence</th><th class="r">Points</th></tr>${factors}<tr><td><b>Total</b></td><td>Tier ${a.explain.tier}</td><td class="r"><b>${a.explain.score}</b></td></tr></table></div></details>
-    <div class="row" style="margin-top:22px;justify-content:flex-end">${btn('Close', 'close')}${r.loan ? btn('Open loan ' + r.loan.id, 'open-loan', `data-id="${r.loan.id}"`, 'pri') : a.status === 'referred' ? btn('Go to underwriter queue', 'nav', 'data-view="queue"', 'pri') : ''}</div>`);
-  await refreshChrome();
+  W.result = await api('apply', input);
+  W.step = 3; await go('apply');
 }
 
 // ----------------------------------------------------------------- underwriter queue
@@ -207,7 +247,7 @@ VIEWS.loan = async () => {
     body = `<div class="card">${l.payments.length ? `<table><tr><th>Date</th><th>Channel</th><th class="r">Amount</th><th></th></tr>${l.payments.slice().reverse().map(x => `<tr><td>${x.date}</td><td>${esc(x.channel.replace('_', ' '))}${x.settlement ? ' (settlement)' : ''}</td><td class="r">LKR ${lkr(x.amount)}</td><td class="r">${x.reversed ? tag('reversed', 'bad') : x.channel === 'return_credit' ? '' : `<button class="btn link sm" data-act="reverse" data-id="${l.id}" data-pay="${x.id}">Reverse</button>`}</td></tr>`).join('')}</table>` : '<p class="muted">No payments yet.</p>'}
     ${l.ddLog ? `<div class="divider"></div><h2>Direct-debit attempts</h2><table>${l.ddLog.slice(-6).map(x => `<tr><td>${x.at}</td><td>Instalment ${x.row}</td><td class="r">LKR ${lkr(x.amount)}</td><td class="r">${tag(x.result, x.result === 'success' ? 'ok' : 'bad')}</td></tr>`).join('')}</table>` : ''}</div>`;
   } else {
-    body = l.agreement ? `<div class="card"><div class="row" style="margin-bottom:14px"><h2 style="margin:0">Agreement ${esc(l.agreement.templateVersion)} · ${l.agreement.lang.toUpperCase()}</h2>${l.agreement.signedAt ? tag('Signed ' + l.agreement.signedAt + ' · ' + l.agreement.docRef, 'ok') : tag('Awaiting e-signature', 'warn')}</div><pre>${esc(l.agreement.text)}</pre></div>` : '<div class="card muted">No agreement has been generated yet.</div>';
+    body = l.agreement ? agreementDoc(l) : '<div class="card muted">No agreement has been generated yet. Use "Send agreement for e-signature" on the Overview tab.</div>';
   }
   return `<span class="crumb" data-act="nav" data-view="loans">← All loans</span>
   ${head(`${l.id} ${statusTag(l.status)}`, `${esc(l.customerName)} · LKR ${lkr0(l.principal)} over ${l.tenor} months`, more)}
@@ -277,6 +317,74 @@ VIEWS.audit = async () => {
   <div class="tabs" style="margin-top:0">${tabs.map(([k, t]) => `<button data-atab="${k}" class="${S.auditTab === k ? 'on' : ''}">${t}</button>`).join('')}</div><div class="card">${body}</div>`;
 };
 
+
+// ----------------------------------------------------------------- agreement document (letter format)
+const DOC = {
+  en: { ref: 'Ref', date: 'Date', to: 'To', dear: 'Dear', title: 'LOAN AGREEMENT: SINGER CREDIT', intro: 'Thank you for choosing SINGER CREDIT. We are pleased to confirm your loan on the following terms.', item: 'Goods', desc: 'Description', cash: 'Cash price', down: 'Down payment', loan: 'Loan amount', charges: 'Charges', inst: 'Instalment', total: 'Total payable', important: 'IMPORTANT INFORMATION', facility: 'Facility', tenor: 'Tenor', due: 'Due date', pay: 'Payment terms', late: 'Late payment', settle: 'Early settlement', disb: 'Disbursement', schedule: 'Repayment schedule', no: 'No.', amount: 'Instalment amount', cust: 'Customer', singer: 'For SINGER (SRI LANKA) PLC', signed: 'Digitally signed', awaiting: 'Awaiting e-signature', months: 'months', thanks: 'We trust this meets your approval.', regards: 'Very truly yours',
+    facilityV: 'SINGER CREDIT instalment loan', dueV: d => `Day ${d} of each month (adjusted for weekends and public holidays)`, payV: 'Direct debit from your verified bank account', lateV: 'Grace period, late fee and penal interest apply as set out in SINGER policy, within system caps', settleV: 'Allowed at any time; unearned service charges are rebated', disbV: 'Paid directly to SINGER against your order. No cash is paid to you.', goodsV: p => `${p}`, clauses: ['This agreement takes effect only after you sign it. No loan proceeds are released without a signed agreement.', 'The loan is for the purchase of the SINGER goods above and is activated on the order event agreed with SINGER.', 'You may request a one-time change of due date, subject to approval.'] },
+  si: { ref: 'යොමුව', date: 'දිනය', to: 'වෙත', dear: 'ආයුබෝවන්', title: 'ණය ගිවිසුම: SINGER CREDIT', intro: 'SINGER CREDIT තෝරාගැනීම ගැන ස්තූතියි. ඔබේ ණය පහත කොන්දේසි යටතේ තහවුරු කිරීමට සතුටු වෙමු.', item: 'භාණ්ඩ', desc: 'විස්තරය', cash: 'මුදල් මිල', down: 'මූලික ගෙවීම', loan: 'ණය මුදල', charges: 'ගාස්තු', inst: 'වාරිකය', total: 'ගෙවිය යුතු මුළු මුදල', important: 'වැදගත් තොරතුරු', facility: 'පහසුකම', tenor: 'කාලය', due: 'නියමිත දිනය', pay: 'ගෙවීම් කොන්දේසි', late: 'ප්‍රමාද ගෙවීම්', settle: 'කල් ඉක්මවා පියවීම', disb: 'මුදල් නිදහස් කිරීම', schedule: 'ආපසු ගෙවීමේ කාලසටහන', no: 'අංකය', amount: 'වාරික මුදල', cust: 'පාරිභෝගිකයා', singer: 'SINGER (ශ්‍රී ලංකා) PLC වෙනුවෙන්', signed: 'ඩිජිටල් අත්සන', awaiting: 'ඊ-අත්සන බලාපොරොත්තුවෙන්', months: 'මාස', thanks: 'මෙය ඔබට පිළිගත හැකි වනු ඇතැයි අපි විශ්වාස කරමු.', regards: 'මෙයට විශ්වාසී',
+    facilityV: 'SINGER CREDIT වාරික ණය', dueV: d => `සෑම මාසයකම ${d} වන දින (සති අන්ත සහ නිවාඩු දින සඳහා ගැලපේ)`, payV: 'ඔබේ තහවුරු කළ බැංකු ගිණුමෙන් සෘජු හර කිරීම', lateV: 'SINGER ප්‍රතිපත්තියට අනුව වරප්‍රසාද කාලය, ප්‍රමාද ගාස්තු සහ දඩ පොලිය අදාළ වේ', settleV: 'ඕනෑම වේලාවක කළ හැක; නොඋපයා ඇති ගාස්තු ආපසු අඩු කෙරේ', disbV: 'ඔබේ ඇණවුමට එරෙහිව කෙලින්ම SINGER වෙත ගෙවේ. ඔබට මුදල් ගෙවනු නොලැබේ.', goodsV: p => `${p}`, clauses: ['ඔබ අත්සන් කළ පසුව පමණක් මෙම ගිවිසුම බලපැවැත්වේ.', 'මෙම ණය ඉහත SINGER භාණ්ඩ මිලදී ගැනීම සඳහා වන අතර ඇණවුම් සිදුවීමේදී සක්‍රිය වේ.', 'නියමිත දිනය එක් වරක් පමණක් අනුමැතිය සහිතව වෙනස් කළ හැක.'] },
+  ta: { ref: 'குறிப்பு', date: 'தேதி', to: 'பெறுநர்', dear: 'அன்புடையீர்', title: 'கடன் ஒப்பந்தம்: SINGER CREDIT', intro: 'SINGER CREDIT ஐத் தேர்ந்தெடுத்தமைக்கு நன்றி. உங்கள் கடனை பின்வரும் நிபந்தனைகளில் உறுதிப்படுத்த மகிழ்கிறோம்.', item: 'பொருட்கள்', desc: 'விவரம்', cash: 'ரொக்க விலை', down: 'முன்பணம்', loan: 'கடன் தொகை', charges: 'கட்டணங்கள்', inst: 'தவணை', total: 'மொத்தச் செலுத்தல்', important: 'முக்கிய தகவல்', facility: 'வசதி', tenor: 'காலம்', due: 'செலுத்தும் தேதி', pay: 'செலுத்தும் முறை', late: 'தாமதக் கட்டணம்', settle: 'முன்கூட்டிய தீர்வு', disb: 'தொகை விடுவிப்பு', schedule: 'திருப்பிச் செலுத்தும் அட்டவணை', no: 'எண்', amount: 'தவணைத் தொகை', cust: 'வாடிக்கையாளர்', singer: 'SINGER (ஸ்ரீலங்கா) PLC சார்பாக', signed: 'டிஜிட்டல் கையொப்பம்', awaiting: 'மின்-கையொப்பத்திற்காக காத்திருக்கிறது', months: 'மாதங்கள்', thanks: 'இது உங்களுக்கு ஏற்புடையது என நம்புகிறோம்.', regards: 'தங்கள் உண்மையுள்ள',
+    facilityV: 'SINGER CREDIT தவணைக் கடன்', dueV: d => `ஒவ்வொரு மாதமும் ${d} ஆம் தேதி (வார இறுதி, விடுமுறைக்கு ஏற்ப மாறும்)`, payV: 'சரிபார்க்கப்பட்ட வங்கிக் கணக்கிலிருந்து நேரடிப் பற்று', lateV: 'SINGER கொள்கைப்படி சலுகை காலம், தாமதக் கட்டணம், அபராத வட்டி பொருந்தும்', settleV: 'எப்போதும் செய்யலாம்; ஈட்டப்படாத கட்டணங்கள் திருப்பி வழங்கப்படும்', disbV: 'உங்கள் ஆர்டருக்காக நேரடியாக SINGER க்கு செலுத்தப்படும். உங்களுக்கு பணம் வழங்கப்படாது.', goodsV: p => `${p}`, clauses: ['நீங்கள் கையொப்பமிட்ட பின்பே இந்த ஒப்பந்தம் அமலுக்கு வரும்.', 'இந்தக் கடன் மேற்கண்ட SINGER பொருட்களை வாங்குவதற்கானது; ஆர்டர் நிகழ்வில் செயல்படுத்தப்படும்.', 'செலுத்தும் தேதியை ஒருமுறை மட்டும், ஒப்புதலுடன் மாற்றலாம்.'] }
+};
+
+function agreementDoc(l) {
+  const lg = l.agreement.lang, D = DOC[lg] || DOC.en, c = l.customer;
+  const today = fmtDate(l.agreement.sentAt);
+  const rows = l.schedule.rows;
+  const first = rows[0];
+  return `<div class="doc-bar"><span class="muted small">Agreement language: <b>${lg.toUpperCase()}</b> · template ${esc(l.agreement.templateVersion)}</span><span class="sp"></span>${l.agreement.signedAt ? tag('Signed ' + l.agreement.signedAt + ' · ' + l.agreement.docRef, 'ok') : tag('Awaiting e-signature', 'warn')}${btn('Print / Save as PDF', 'print', '', 'sm')}</div>
+  <div class="doc"><div class="doc-head"><div class="doc-ref"><b>${D.ref}: SCL-${esc(l.id)}</b><br>${today}</div><div class="doc-logo">SINGER</div></div>
+    <p style="margin-top:26px">${D.to}: <b>${esc(c.name)}</b><br>NIC ${esc(c.nic)}${c.phone ? ' · ' + esc(c.phone) : ''}</p>
+    <p>${D.dear} ${esc(c.name)},</p>
+    <div class="doc-title">${D.title}</div>
+    <p>${D.intro}</p>
+    <table><tr><th>${D.item}</th><th>${D.desc}</th><th class="r">${D.cash}</th><th class="r">${D.down}</th><th class="r">${D.loan}</th><th class="r">${D.charges}</th><th class="r">${D.inst}</th><th class="r">${D.total}</th></tr>
+      <tr><td><b>${esc(l.order.id)}</b></td><td>${esc(l.product)}<br>${l.tenor} ${D.months}${l.promo ? ' · ' + esc(l.promo) : ''}</td><td class="r">${lkr0(l.cashPrice - l.saleDiscount)}</td><td class="r">${lkr0(l.downPayment)}</td><td class="r">${lkr0(l.principal)}</td><td class="r">${lkr0(l.charge + l.fee)}</td><td class="r">${lkr0(l.instalment)}</td><td class="r"><b>${lkr0(l.total + l.downPayment)}</b></td></tr></table>
+    <div class="doc-box">${D.important}</div>
+    <dl><dt>${D.facility}</dt><dd>${D.facilityV}</dd><dt>${D.tenor}</dt><dd>${l.tenor} ${D.months}</dd><dt>${D.due}</dt><dd>${D.dueV(first ? first.nominal.slice(8) : l.dueDay)}</dd><dt>${D.pay}</dt><dd>${D.payV}</dd><dt>${D.late}</dt><dd>${D.lateV}</dd><dt>${D.settle}</dt><dd>${D.settleV}</dd><dt>${D.disb}</dt><dd>${D.disbV}</dd></dl>
+    <h3>${D.schedule}</h3>
+    <table><tr><th>${D.no}</th><th>${D.due}</th><th class="r">${D.amount}</th></tr>${rows.map(r => `<tr><td>${r.no}</td><td>${r.due}</td><td class="r">LKR ${lkr(r.principal + r.charge + r.fee)}</td></tr>`).join('')}</table>
+    <ol>${D.clauses.map(x => `<li>${x}</li>`).join('')}</ol>
+    <p style="margin-top:22px">${D.thanks}</p><p>${D.regards},</p>
+    <div class="doc-sign"><div><div class="signed">${l.agreement.signedAt ? '✔ ' + D.signed + '<br><span style="font-weight:400;font-size:12px">' + esc(l.agreement.docRef) + ' · ' + l.agreement.signedAt + '</span>' : D.awaiting}</div><div class="line"><b>${D.cust}</b><br>${esc(c.name)}</div></div>
+      <div><div class="signed" style="color:#1a1a1a"></div><div class="line"><b>${D.singer}</b><br>Authorised signatory</div></div></div>
+    <div class="doc-foot">SINGER (SRI LANKA) PLC · SINGER CREDIT · Agreement ${esc(l.agreement.templateVersion)}</div></div>`;
+}
+
+// ----------------------------------------------------------------- disbursements
+VIEWS.disbursements = async () => {
+  const rows = await api('disbursements');
+  const released = rows.filter(r => r.stage === 'released');
+  const pending = rows.filter(r => r.stage !== 'released');
+  const sum = a => a.reduce((t, r) => t + r.amount, 0);
+  const stageTag = r => r.stage === 'released' ? tag('Released', 'ok') : r.stage === 'pending_delivery' ? tag('Pending delivery', 'warn') : tag('Awaiting signature', 'info');
+  const kpi = (cls, ic, label, val, help) => `<div class="card kpi ${cls}"><span class="ic">${icon(ic)}</span><div class="lbl">${label}</div><div class="val"><small>LKR</small>${lkr0(val)}</div><div class="help">${help}</div></div>`;
+  return `${head('Disbursements', 'Loan proceeds are paid to SINGER against the customer\'s order. No cash goes to the customer.')}
+  <div class="grid g3">${kpi('green', 'disb', 'Released to SINGER', sum(released), released.length + (released.length === 1 ? ' loan' : ' loans'))}${kpi('amber', 'loans', 'Pending release', sum(pending), pending.length + (pending.length === 1 ? ' loan waiting' : ' loans waiting'))}${kpi('blue', 'reports', 'Total pipeline', sum(rows), 'Approved, signed and released')}</div>
+  <div class="card" style="margin-top:20px"><div class="sect">Disbursement register</div><table><tr><th>Loan</th><th>Customer</th><th>Order</th><th class="r">Amount</th><th>Stage</th><th>Reference</th><th></th></tr>
+  ${rows.map(r => `<tr><td><a href="#" data-act="open-loan" data-id="${r.loan}"><b>${r.loan}</b></a><div class="sub">${esc(r.product)}</div></td><td>${esc(r.customer)}</td><td>${esc(r.order)}</td><td class="r"><b>LKR ${lkr0(r.amount)}</b></td><td>${stageTag(r)}${r.date ? `<div class="sub">${r.date}</div>` : ''}</td><td class="muted">${esc(r.reference) || '-'}</td>
+  <td class="r">${r.stage === 'pending_delivery' ? btn('Release on delivery', 'release', `data-id="${r.loan}"`, 'sm pri') : r.stage === 'awaiting_signature' ? '<span class="muted small">Needs signed agreement</span>' : ''}</td></tr>`).join('') || '<tr><td colspan="7" class="muted">No disbursements yet.</td></tr>'}</table></div>`;
+};
+
+// ----------------------------------------------------------------- user guide (SOP)
+function md(src) {
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const out = []; let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const line of src.split('\n')) {
+    let m;
+    if ((m = line.match(/^(#{1,3}) (.*)/))) { close(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); }
+    else if ((m = line.match(/^\d+\. (.*)/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); }
+    else if ((m = line.match(/^- (.*)/))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); }
+    else if (line.trim() === '') close();
+    else { close(); out.push(`<p>${inline(line)}</p>`); }
+  }
+  close();
+  return out.join('');
+}
+VIEWS.guide = async () => `<div class="guide">${md(await api('sop'))}</div>`;
+
 // ----------------------------------------------------------------- actions
 function field(id, label, type = 'text', v = '') { return `<div><label>${label}</label><input id="${id}" type="${type}" value="${esc(v)}"></div>`; }
 const val = id => $('#' + id).value;
@@ -288,8 +396,12 @@ const ACTIONS = {
   close: () => closeModal(),
   'open-loan': async el => { closeModal(); S.loanTab = 'overview'; await go('loan', el.dataset.id); },
   advance: async el => { await api('advance', +el.dataset.days); toast(`Moved ${el.dataset.days} day(s) forward. Direct debits, penalties and reminders ran.`); await go(S.view); },
-  reset: async () => { await api('reset'); S.draft = null; S.lastQuote = null; toast('Demo data reset'); await go('dashboard'); },
-  quote: () => doQuote(),
+  reset: async () => { await api('reset'); S.draft = null; Object.assign(W, { step: 1, quote: null, kyc: null, result: null }); toast('Demo data reset'); await go('dashboard'); },
+  'wiz-next': () => wizNext(),
+  'wiz-back': async () => { W.step = 1; await go('apply'); },
+  'wiz-new': async () => { S.draft = null; Object.assign(W, { step: 1, quote: null, kyc: null, result: null }); await go('apply'); },
+  print: () => window.print(),
+  release: async el => { await api('orderEvent', el.dataset.id, 'delivered', {}); toast('Delivery confirmed. Proceeds released to SINGER.'); await go('disbursements'); },
   pick: el => { document.querySelectorAll('.plan').forEach(o => o.classList.remove('sel')); el.classList.add('sel'); S.draft.tenor = +el.dataset.tenor; $('#picked').textContent = `${el.dataset.tenor}-month plan selected`; $('#submitBtn').disabled = false; },
   'submit-app': () => doSubmit(),
   decide: async el => {
@@ -349,7 +461,7 @@ document.addEventListener('click', async e => {
   const nav = e.target.closest('[data-nav]');
   if (nav) { e.preventDefault(); return go(nav.dataset.nav); }
   const lang = e.target.closest('[data-lang]');
-  if (lang) { S.lang = lang.dataset.lang; await refreshChrome(); if (S.view === 'apply' && S.lastQuote && $('#quote-out').innerHTML) return doQuote(); return; }
+  if (lang) { S.lang = lang.dataset.lang; await refreshChrome(); if (S.view === 'apply' && W.step === 2) return go('apply'); if (S.view === 'loan') return go('loan'); return; }
   const tab = e.target.closest('[data-tab]');
   if (tab) { S.loanTab = tab.dataset.tab; return go('loan'); }
   const atab = e.target.closest('[data-atab]');

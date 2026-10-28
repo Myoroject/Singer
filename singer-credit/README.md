@@ -40,4 +40,6 @@ Real integrations (IFS ERP, e-KYC, Direct Debit, e-signature, SMS/email/push gat
 Sinhala and Tamil text is draft and must be reviewed by SINGER. Requirement LM-05 (champion/challenger) and the
 non-functional/security requirements (uptime, DR, MFA, encryption at rest) are out of scope for this demo.
 
-`demo/singer-credit-demo.mp4` is a screen recording of a scripted walkthrough.
+`demo/singer-credit-demo.mp4` is a screen recording of a scripted walkthrough (recorded before the latest visual refresh).
+
+Staff instructions are in `docs/SOP.md`, also available inside the app under **User guide**. The SINGER wordmark is a text placeholder; swap in the official logo asset before client use.

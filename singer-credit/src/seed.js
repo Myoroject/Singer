@@ -1,6 +1,7 @@
 'use strict';
 // Demo data. All people are fictional; NICs are synthetic.
 const E = require('./engine');
+const { addDays } = require('./util');
 
 const DEMO_TODAY = '2026-10-24';
 
@@ -12,11 +13,11 @@ function createLoanFlow(state, input, { sign = true, deliver = true } = {}) {
   return { app, loan };
 }
 
-function seed() {
-  const state = E.newState('2026-07-01');
+function seed(today = DEMO_TODAY) {
+  const state = E.newState(addDays(today, -115));
   state.promos = [
-    { code: 'ZERO6', name: '0% service charge, 6 months', from: '2026-01-01', to: '2026-12-31', products: ['Electronics', 'Home Appliances'], tenors: [6], annualFlatOverride: 0, feeWaived: true },
-    { code: 'FEST5', name: 'Festive 5% sale discount', from: '2026-01-01', to: '2026-12-31', products: ['Home Appliances', 'Furniture'], saleDiscountPct: 0.05 }
+    { code: 'ZERO6', name: '0% service charge, 6 months', from: addDays(today, -300), to: addDays(today, 365), products: ['Electronics', 'Home Appliances'], tenors: [6], annualFlatOverride: 0, feeWaived: true },
+    { code: 'FEST5', name: 'Festive 5% sale discount', from: addDays(today, -300), to: addDays(today, 365), products: ['Home Appliances', 'Furniture'], saleDiscountPct: 0.05 }
   ];
   const people = [
     { nic: '856234567V', name: 'Nimali Perera', phone: '0771234501', lang: 'en', ifs: { onTimePayments: 14, latePayments: 1, purchases: 6, hpOutstanding: 25000 }, docs: { monthlyIncome: 180000, monthlyObligations: 20000, salaryMonthsRegular: 6, tamperRisk: 5 } },
@@ -39,10 +40,10 @@ function seed() {
   createLoanFlow(state, { nic: '856234567V', product: 'Electronics', cashPrice: 220000, downPayment: 20000, tenor: 12, docs: state.demoDocs['856234567V'], orderId: 'ORD-88121' });
   createLoanFlow(state, { nic: '921456789V', product: 'Home Appliances', cashPrice: 95000, downPayment: 10000, tenor: 6, promoCode: 'ZERO6', docs: state.demoDocs['921456789V'], orderId: 'ORD-88140' });
   createLoanFlow(state, { nic: '883127123V', product: 'Furniture', cashPrice: 180000, downPayment: 20000, tenor: 12, docs: state.demoDocs['883127123V'], orderId: 'ORD-88163' });
-  E.advanceDays(state, 50); // 2026-08-20
+  E.advanceDays(state, 50);
   createLoanFlow(state, { nic: '945678234V', product: 'Electronics', cashPrice: 140000, downPayment: 20000, tenor: 6, docs: state.demoDocs['945678234V'], orderId: 'ORD-88410' });
-  E.advanceDays(state, 65); // 2026-10-24
-  state.clock = DEMO_TODAY;
+  E.advanceDays(state, 65);
+  state.clock = today;
   return state;
 }
 
