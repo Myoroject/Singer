@@ -11,5 +11,8 @@
   "private": true,
   "devDependencies": {
     "electron": "^45.0.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
