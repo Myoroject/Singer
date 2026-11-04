@@ -11,7 +11,15 @@ All data is synthetic. The app was written from the RFP; it is not a copy of any
 npm install
 npm start          # launches the desktop app (seeded demo data, persisted in the user data folder)
 npm test           # engine tests (node:test)
+node web/build.js  # rebuilds the single-file browser version at web/singer-credit.html
 ```
+
+Windows users can double-click `run-windows.bat`; macOS and Linux users can run `./run-mac-linux.sh`.
+Both install dependencies on first run and then launch the app.
+
+`web/singer-credit.html` is the same application as one self-contained page. It runs the identical
+engine (`src/`) through `src/api.js`, keeps its data in the browser's local storage, and needs no
+install — open the file in any browser, or publish it.
 
 Use "Reset demo data" in the top bar to return to the seed data, and "+1 / +7 / +30 days" to
 simulate time passing (direct-debit attempts, penalty accrual, arrears, limit freeze, reminders).

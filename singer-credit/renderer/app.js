@@ -46,7 +46,7 @@ const fmtDate = iso => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', 
 
 async function refreshChrome() {
   const st = await api('state');
-  S.clock = st.clock; S.policy = st.policy; S.promos = st.promos; S.labels = st.labels;
+  S.clock = st.clock; S.policy = st.policy; S.promos = st.promos; S.labels = st.labels; S.platform = st.platform;
   $('#clock').textContent = fmtDate(S.clock);
   const dash = await api('dashboard');
   $('#nav').innerHTML = NAV.map(([k, t, ic]) => {
@@ -333,7 +333,7 @@ function agreementDoc(l) {
   const today = fmtDate(l.agreement.sentAt);
   const rows = l.schedule.rows;
   const first = rows[0];
-  return `<div class="doc-bar"><span class="muted small">Agreement language: <b>${lg.toUpperCase()}</b> · template ${esc(l.agreement.templateVersion)}</span><span class="sp"></span>${l.agreement.signedAt ? tag('Signed ' + l.agreement.signedAt + ' · ' + l.agreement.docRef, 'ok') : tag('Awaiting e-signature', 'warn')}${btn('Print / Save as PDF', 'print', '', 'sm')}</div>
+  return `<div class="doc-bar"><span class="muted small">Agreement language: <b>${lg.toUpperCase()}</b> · template ${esc(l.agreement.templateVersion)}</span><span class="sp"></span>${l.agreement.signedAt ? tag('Signed ' + l.agreement.signedAt + ' · ' + l.agreement.docRef, 'ok') : tag('Awaiting e-signature', 'warn')}${S.platform === 'desktop' ? btn('Print / Save as PDF', 'print', '', 'sm') : btn('Copy agreement text', 'copy-doc', '', 'sm')}</div>
   <div class="doc"><div class="doc-head"><div class="doc-ref"><b>${D.ref}: SCL-${esc(l.id)}</b><br>${today}</div><div class="doc-logo">SINGER</div></div>
     <p style="margin-top:26px">${D.to}: <b>${esc(c.name)}</b><br>NIC ${esc(c.nic)}${c.phone ? ' · ' + esc(c.phone) : ''}</p>
     <p>${D.dear} ${esc(c.name)},</p>
@@ -401,6 +401,16 @@ const ACTIONS = {
   'wiz-back': async () => { W.step = 1; await go('apply'); },
   'wiz-new': async () => { S.draft = null; Object.assign(W, { step: 1, quote: null, kyc: null, result: null }); await go('apply'); },
   print: () => window.print(),
+  'copy-text': async el => {
+    const node = document.getElementById(el.dataset.target);
+    try { await navigator.clipboard.writeText(node.innerText); toast('Copied'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(node); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Press Ctrl+C to copy the selected text'); }
+  },
+  'copy-doc': async () => {
+    const node = document.querySelector('.doc');
+    try { await navigator.clipboard.writeText(node.innerText); toast('Agreement copied to the clipboard'); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(node); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('Press Ctrl+C to copy the selected agreement'); }
+  },
   release: async el => { await api('orderEvent', el.dataset.id, 'delivered', {}); toast('Delivery confirmed. Proceeds released to SINGER.'); await go('disbursements'); },
   pick: el => { document.querySelectorAll('.plan').forEach(o => o.classList.remove('sel')); el.classList.add('sel'); S.draft.tenor = +el.dataset.tenor; $('#picked').textContent = `${el.dataset.tenor}-month plan selected`; $('#submitBtn').disabled = false; },
   'submit-app': () => doSubmit(),
@@ -453,7 +463,9 @@ const ACTIONS = {
     let rows;
     if (el.dataset.n === 'loan-book') rows = (await api('loans')).map(l => ({ loan: l.id, customer: l.customerName, product: l.product, status: l.status, principal: l.principal, outstanding: l.outstanding, dpd: l.dpd }));
     else rows = (await api('dashboard')).exposures;
-    toast('Saved ' + await api('exportCsv', el.dataset.n, rows));
+    const out = await api('exportCsv', el.dataset.n, rows);
+    if (out.saved) return toast('Saved ' + out.saved);
+    modal(`<h2>${esc(out.filename)}</h2><p class="muted" style="margin-top:0">Copy these rows into Excel or save them as a .csv file.</p><pre id="csv-out">${esc(out.csv)}</pre><div class="row" style="margin-top:22px;justify-content:flex-end">${btn('Close', 'close')}${btn('Copy', 'copy-text', 'data-target="csv-out"', 'pri')}</div>`);
   }
 };
 
